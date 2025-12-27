@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import List, Optional, Set
 from ..utilities.gitignore import GitIgnoreMatcher
-from ..services.list_enteries import list_entries
+from .list_enteries import list_entries
 from ..utilities.logger import Logger, OutputBuffer
+from ..utilities.utils import copy_to_clipboard
 from ..constants.constant import (BRANCH, LAST, SPACE, VERT, 
                                   FILE_EMOJI, EMPTY_DIR_EMOJI, 
                                   NORMAL_DIR_EMOJI)
@@ -214,3 +215,125 @@ def print_summary(
     output_buffer.write("\nDirectory Summary:")
     for level in sorted(summary):
         output_buffer.write(f"Level {level}: {summary[level]['dirs']} dirs, {summary[level]['files']} files")
+
+
+def run_tree_mode(
+    args,
+    roots: List[Path],
+    output_buffer,
+    logger,
+) -> None:
+    """
+    Run the normal tree-printing workflow (non-zip mode).
+    """
+
+    for i, root in enumerate(roots):
+        # Interactive mode for each path (if enabled)
+        selected_files = None
+        if args.interactive:
+            from .interactive import select_files
+            selected_files = select_files(
+                root=root,
+                respect_gitignore=not args.no_gitignore,
+                gitignore_depth=args.gitignore_depth,
+                extra_excludes=args.exclude,
+                include_patterns=args.include,
+                exclude_patterns=args.exclude,
+                include_file_types=args.include_file_types,
+            )
+            if not selected_files:
+                continue
+
+        # Add header for multiple paths
+        if len(roots) > 1:
+            if i > 0:
+                output_buffer.write("")  # Empty line between trees
+            output_buffer.write(str(root))
+
+        draw_tree(
+            root=root,
+            output_buffer=output_buffer,
+            logger=logger,
+            depth=args.max_depth,
+            show_all=args.hidden_items,
+            extra_excludes=args.exclude,
+            respect_gitignore=not args.no_gitignore,
+            gitignore_depth=args.gitignore_depth,
+            max_items=args.max_items,
+            no_limit=args.no_limit,
+            exclude_depth=args.exclude_depth,
+            no_files=args.no_files,
+            emoji=args.emoji,
+            whitelist=selected_files,
+            include_patterns=args.include,
+            include_file_types=args.include_file_types,
+        )
+
+        if args.summary:
+            print_summary(
+                root=root,
+                output_buffer=output_buffer,
+                logger=logger,
+                respect_gitignore=not args.no_gitignore,
+                gitignore_depth=args.gitignore_depth,
+                extra_excludes=args.exclude,
+                include_patterns=args.include,
+                include_file_types=args.include_file_types,
+            )
+
+    # Write to output file if requested
+    if args.output is not None:
+        content = output_buffer.get_value()
+
+        if args.output.endswith(".md"):
+            content = f"```\n{content}```\n"
+
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    # Copy to clipboard if requested
+    if args.copy:
+        if not copy_to_clipboard(output_buffer.get_value(), logger=logger):
+            output_buffer.write(
+                "Warning: Could not copy to clipboard. "
+                "Please install a clipboard utility (xclip, wl-copy) "
+                "or ensure your environment supports it."
+            )
+        else:
+            output_buffer.clear()
+            logger.log(logger.INFO, "Tree output copied to clipboard successfully.")
+
+    # Handle file exports
+    if args.json or args.txt or args.md:
+        from .output_formatters import build_tree_data, write_outputs
+
+        include_contents = not args.no_contents
+
+        # NOTE: exports use the last processed root (matches previous behavior)
+        tree_data = build_tree_data(
+            root=root,
+            output_buffer=output_buffer,
+            logger=logger,
+            depth=args.max_depth,
+            show_all=args.hidden_items,
+            extra_excludes=args.exclude,
+            respect_gitignore=not args.no_gitignore,
+            gitignore_depth=args.gitignore_depth,
+            max_items=args.max_items,
+            exclude_depth=args.exclude_depth,
+            no_files=args.no_files,
+            whitelist=selected_files,
+            include_patterns=args.include,
+            include_file_types=args.include_file_types,
+            include_contents=include_contents,
+        )
+
+        write_outputs(
+            logger=logger,
+            tree_data=tree_data,
+            json_path=args.json,
+            txt_path=args.txt,
+            md_path=args.md,
+            emoji=args.emoji,
+            include_contents=include_contents,
+        )

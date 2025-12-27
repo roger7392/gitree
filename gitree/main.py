@@ -1,17 +1,15 @@
 # gitree/main.py
 from __future__ import annotations
-import sys, io, glob
+import sys
 if sys.platform.startswith('win'):      # fix windows unicode error on CI
     sys.stdout.reconfigure(encoding='utf-8')
 
-from pathlib import Path
-from .services.draw_tree import draw_tree, print_summary
+from .services.tree_service import run_tree_mode
 from .services.parser import parse_args, correct_args
-from .utilities.utils import copy_to_clipboard
 from .utilities.config import resolve_config
 from .utilities.logger import Logger, OutputBuffer
-from .services.files_selection import resolve_selected_files
-from .services.handle_basic_cli import handle_basic_cli_args, resolve_root_paths
+from .services.basic_args_handler import handle_basic_cli_args, resolve_root_paths
+from .services.zipping_service import zip_roots
 
 
 def main() -> None:
@@ -20,6 +18,11 @@ def main() -> None:
 
     Handles argument parsing, configuration loading, and orchestrates the main
     functionality including tree printing, zipping, and file exports.
+
+    For Contributors:
+        - If you are adding features, make sure to keep the main function clean
+        - Do not put implementation details here
+        - Use services/ and utilities/ modules for logic, and import their functions here
     """
     args = parse_args()
     logger = Logger()
@@ -32,6 +35,8 @@ def main() -> None:
 
     # Fix any incorrect CLI args (paths missing extensions, etc.)
     args = correct_args(args)
+    # This one bellow is also used for determining whether to draw tree or not
+    condition_for_no_output = args.copy or args.output or args.zip 
 
 
     # if some specific Basic CLI args given, execute and return
@@ -45,162 +50,17 @@ def main() -> None:
 
     # if zipping is requested
     if args.zip is not None:
-        import zipfile
-        zip_path = Path(f"{args.zip}.zip" if "." not in args.zip else f"{args.zip}").resolve()
+        zip_roots(args, roots, output_buffer, logger)
 
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            for root in roots:
-                # Interactive mode for each path (if enabled)
-                selected_files = None
-                if args.interactive:
-                    from .services.interactive import select_files
-                    selected_files = select_files(
-                        root=root,
-                        respect_gitignore=not args.no_gitignore,
-                        gitignore_depth=args.gitignore_depth,
-                        exclude_patterns=args.exclude,
-                        include_patterns=args.include,
-                        include_file_types=args.include_file_types
-                    )
-                    if not selected_files:
-                        continue
+    # else, print the tree normally
+    else:       
+        run_tree_mode(args, roots, output_buffer, logger)
 
-                # Add this root to the zip (in append mode logic)
-                from .services.zip_project import zip_project_to_handle
-                # Only use prefix for directories when multiple roots, not for files
-                prefix = ""
-                if len(roots) > 1 and root.is_dir():
-                    prefix = root.name
-                zip_project_to_handle(
-                    z=z,
-                    root=root,
-                    output_buffer=output_buffer,
-                    logger=logger,
-                    show_all=args.hidden_items,
-                    extra_excludes=args.exclude,
-                    respect_gitignore=not args.no_gitignore,
-                    gitignore_depth=args.gitignore_depth,
-                    exclude_depth=args.exclude_depth,
-                    depth=args.max_depth,
-                    no_files=args.no_files,
-                    whitelist=selected_files,
-                    arcname_prefix=prefix,
-                    include_patterns=args.include,
-                    include_file_types=args.include_file_types
-                )
-    else:       # else, print the tree normally
-        for i, root in enumerate(roots):
-            # Interactive mode for each path (if enabled)
-            selected_files = None
-            if args.interactive:
-                from .services.interactive import select_files
-                selected_files = select_files(
-                    root=root,
-                    respect_gitignore=not args.no_gitignore,
-                    gitignore_depth=args.gitignore_depth,
-                    extra_excludes=args.exclude,
-                    include_patterns=args.include,
-                    exclude_patterns=args.exclude,
-                    include_file_types=args.include_file_types
-                )
-                if not selected_files:
-                    continue
-
-            # Add header for multiple paths
-            if len(roots) > 1:
-                if i > 0:
-                    output_buffer.write("")  # Empty line between trees
-                output_buffer.write(root)
-
-            draw_tree(
-                root=root,
-                output_buffer=output_buffer,
-                logger=logger,
-                depth=args.max_depth,
-                show_all=args.hidden_items,
-                extra_excludes=args.exclude,
-                respect_gitignore=not args.no_gitignore,
-                gitignore_depth=args.gitignore_depth,
-                max_items=args.max_items,
-                no_limit=args.no_limit,
-                exclude_depth=args.exclude_depth,
-                no_files=args.no_files,
-                emoji=args.emoji,
-                whitelist=selected_files,
-                include_patterns=args.include,
-                include_file_types=args.include_file_types
-            )
-
-            if args.summary:        # call summary if requested
-                print_summary(
-                    root=root,
-                    output_buffer=output_buffer,
-                    logger=logger,
-                    respect_gitignore=not args.no_gitignore,
-                    gitignore_depth=args.gitignore_depth,
-                    extra_excludes=args.exclude,
-                    include_patterns=args.include,
-                    include_file_types=args.include_file_types
-                )
-
-        if args.output is not None:     # that file output code again
-            # Write to file
-            content = output_buffer.get_value()
-
-            # Wrap in markdown code block if .md extension
-            if args.output.endswith('.md'):
-                content = f"```\n{content}```\n"
-
-            with open(args.output, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-        if args.copy:       # Capture output if needed for clipboard
-            if not copy_to_clipboard(output_buffer.get_value(), logger=logger):
-                output_buffer.write("Warning: Could not copy to clipboard. Please install a clipboard utility (xclip, wl-copy) or ensure your environment supports it.")
-            else:
-                output_buffer.clear()
-                logger.log(Logger.INFO, "Tree output copied to clipboard successfully.")
-
-
-        # Handle file outputs
-        if args.json or args.txt or args.md:
-            from .services.output_formatters import build_tree_data, write_outputs
-
-            # Include contents by default, unless --no-contents is specified
-            include_contents = not args.no_contents
-
-            tree_data = build_tree_data(
-                root=root,
-                output_buffer=output_buffer,
-                logger=logger,
-                depth=args.max_depth,
-                show_all=args.hidden_items,
-                extra_excludes=args.exclude,
-                respect_gitignore=not args.no_gitignore,
-                gitignore_depth=args.gitignore_depth,
-                max_items=args.max_items,
-                exclude_depth=args.exclude_depth,
-                no_files=args.no_files,
-                whitelist=selected_files,
-                include_patterns=args.include,
-                include_file_types=args.include_file_types,
-                include_contents=include_contents
-            )
-
-            write_outputs(
-                logger=logger,
-                tree_data=tree_data,
-                json_path=args.json,
-                txt_path=args.txt,
-                md_path=args.md,
-                emoji=args.emoji,
-                include_contents=include_contents
-            )
 
     # print the output only if not copied to clipboard or zipped or output to file
-    condition_for_no_output = args.copy or args.output or args.zip
     if not condition_for_no_output:
         output_buffer.flush()
+
 
     # print the log if verbose mode
     if args.verbose:

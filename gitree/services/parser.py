@@ -198,23 +198,26 @@ def correct_args(args: argparse.Namespace) -> argparse.Namespace:
     """
     # Fix output path if specified incorrectly
     if args.output is not None:
-        args.output = fix_output_path(args.output)
+        args.output = fix_output_path(args.output, default_extension=".txt")
+    if args.zip is not None:
+        args.zip = fix_output_path(args.zip, default_extension=".zip")
 
     return args
 
 
-def fix_output_path(output_path: str) -> str:
+def fix_output_path(output_path: str, default_extension: str) -> str:
     """
     Ensure the output path has a .txt extension.
 
     Args:
         output_path: The original output path string
+        extension: The desired file extension (e.g., ".txt")
 
     Returns:
         The modified output path string with .txt extension if needed
     """
     path = Path(output_path)
     if path.suffix == '':
-        path = path.with_suffix('.txt')
+        path = path.with_suffix(default_extension)
 
     return str(path)

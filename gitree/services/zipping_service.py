@@ -2,13 +2,13 @@ from pathlib import Path
 from typing import List, Optional, Set
 from ..utilities.gitignore import GitIgnoreMatcher
 from ..utilities.logger import Logger, OutputBuffer
-from ..services.list_enteries import list_entries
-import zipfile
-import pathspec
+from .list_enteries import list_entries
+import zipfile, pathspec, argparse
 
 
 def zip_project_to_handle(
     z: zipfile.ZipFile,
+    zipPath: Path,
     *,
     root: Path,
     output_buffer: OutputBuffer,
@@ -31,6 +31,7 @@ def zip_project_to_handle(
     arcname_prefix: prefix to add to archive names (e.g., "project1/")
     """
     gi = GitIgnoreMatcher(root, enabled=respect_gitignore, gitignore_depth=gitignore_depth)
+    output_zip_resolved = zipPath.resolve()
 
     def rec(dirpath: Path, rec_depth: int, patterns: List[str]) -> None:
         if depth is not None and rec_depth >= depth:
@@ -71,6 +72,11 @@ def zip_project_to_handle(
         )
 
         for entry in entries:
+            # NOTE: this is a patch for infinite zipping glitch on windows
+            if output_zip_resolved is not None and entry.resolve() == output_zip_resolved:
+                logger.log(Logger.WARNING, "Infinite zipping detected, skipping this file.")
+                continue
+
             if whitelist is not None:
                  entry_path = str(entry.absolute())
                  if entry.is_file():
@@ -179,3 +185,61 @@ def zip_project(
         else:
             # single file case
             z.write(root, root.name)
+
+
+def zip_roots(args: argparse.Namespace, roots: List[Path], output_buffer: OutputBuffer, logger: Logger) -> None:
+    """
+    Zips the given roots into a zip file specified in args.zip.
+
+    Args:
+        args (argparse.Namespace): Parsed command-line arguments
+        roots (List[Path]): List of root paths to zip
+        output_buffer (OutputBuffer): Buffer to write output to
+        logger (Logger): Logger instance for logging
+    """
+    import zipfile
+    zip_path = Path(args.zip).resolve()
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for root in roots:
+            # Interactive mode for each path (if enabled)
+            selected_files = None
+            if args.interactive:
+                from ..services.interactive import select_files
+                selected_files = select_files(
+                    root=root,
+                    output_buffer=output_buffer,
+                    logger=logger,
+                    respect_gitignore=not args.no_gitignore,
+                    gitignore_depth=args.gitignore_depth,
+                    exclude_patterns=args.exclude,
+                    include_patterns=args.include,
+                    include_file_types=args.include_file_types
+                )
+                if not selected_files:
+                    continue
+
+            # Add this root to the zip (in append mode logic)
+            from ..services.zipping_service import zip_project_to_handle
+            # Only use prefix for directories when multiple roots, not for files
+            prefix = ""
+            if len(roots) > 1 and root.is_dir():
+                prefix = root.name
+            zip_project_to_handle(
+                z=z,
+                zipPath=zip_path,
+                root=root,
+                output_buffer=output_buffer,
+                logger=logger,
+                show_all=args.hidden_items,
+                extra_excludes=args.exclude,
+                respect_gitignore=not args.no_gitignore,
+                gitignore_depth=args.gitignore_depth,
+                exclude_depth=args.exclude_depth,
+                depth=args.max_depth,
+                no_files=args.no_files,
+                whitelist=selected_files,
+                arcname_prefix=prefix,
+                include_patterns=args.include,
+                include_file_types=args.include_file_types
+            )
