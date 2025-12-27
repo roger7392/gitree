@@ -44,7 +44,7 @@ def draw_tree(
         max_items (Optional[int]): Maximum number of items to show per directory
         exclude_depth (Optional[int]): Depth limit for exclude patterns
         no_files (bool): If True, only show directories
-        emoji (bool): If True, hide emoji icons in output
+        emoji (bool): If True, show emoji icons in output
         whitelist (Optional[Set[str]]): Set of file paths to exclusively include
         include_patterns (List[str]): Patterns for files to include
         include_file_types (List[str]): File types (extensions) to include
@@ -116,7 +116,7 @@ def draw_tree(
             is_last = i == len(entries) - 1 and truncated == 0
             connector = LAST if is_last else BRANCH
             suffix = "/" if entry.is_dir() else ""
-            if emoji:
+            if not emoji:
                 output_buffer.write(prefix + connector + entry.name + suffix)
             else:
                 if entry.is_file():

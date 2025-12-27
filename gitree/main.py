@@ -198,11 +198,13 @@ def main() -> None:
             )
 
     # print the output only if not copied to clipboard or zipped or output to file
-    if not args.copy and not args.output and not args.zip:
+    condition_for_no_output = args.copy or args.output or args.zip
+    if not condition_for_no_output:
         output_buffer.flush()
 
     # print the log if verbose mode
     if args.verbose:
+        if not condition_for_no_output: print()
         print("LOG:")
         logger.flush()
 

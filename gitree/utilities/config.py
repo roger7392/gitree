@@ -230,11 +230,7 @@ def merge_config_with_args(config: dict, args: argparse.Namespace) -> argparse.N
         arg_key = key.replace("-", "_")
 
         if not hasattr(args, arg_key):
-            # handle inverted emoji flag
-            if arg_key == "emoji":
-                setattr(args, arg_key, not value)
-            else:
-                setattr(args, arg_key, value)
+            setattr(args, arg_key, value)
 
     return args
 

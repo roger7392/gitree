@@ -67,6 +67,12 @@ def parse_args() -> argparse.Namespace:
         help="Limit items shown per directory (use --no-limit for unlimited)",
     )
     ap.add_argument(
+        "--overrride-files",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Override files even if they exist (for file outputs)"
+    )
+    ap.add_argument(
         "-z", "--zip",
         default=argparse.SUPPRESS,
         help="Create a zip file containing files under path (respects .gitignore)",
@@ -100,15 +106,12 @@ def parse_args() -> argparse.Namespace:
         default=argparse.SUPPRESS,
         help="Copy tree output to clipboard",
     )
-
-    # NOTE: inverted flag (store_false)
     ap.add_argument(
         "-e", "--emoji",
-        action="store_false",
+        action="store_true",
         default=argparse.SUPPRESS,
         help="Show emojis in tree output, default is false",
     )
-
     ap.add_argument(
         "-s", "--summary",
         action="store_true",
