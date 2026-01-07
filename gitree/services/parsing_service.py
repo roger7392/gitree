@@ -77,6 +77,7 @@ class ParsingService:
         """
         
         if getattr(args, "export", None) is not None:
+            args.no_color = True
             args.export = ParsingService._fix_output_path(
                 ctx, args.export,
                 default_extensions={"tree": ".txt", "json": ".json", "md": ".md"},
