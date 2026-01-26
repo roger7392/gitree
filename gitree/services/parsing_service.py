@@ -171,7 +171,7 @@ class ParsingService:
             default=argparse.SUPPRESS,
             help="Display the version number of the tool")
 
-        general.add_argument("--config-user", action="store_true", 
+        general.add_argument("--user-config", action="store_true", 
             default=argparse.SUPPRESS, 
             help="Create a default config.json file in the current directory"
                 " and open that file in the default editor")

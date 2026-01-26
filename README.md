@@ -271,7 +271,7 @@ In addition to the directory path, the following options are available:
 | `--version`, `-v`     | Displays the **installed version**.                      |
 | `--interactive`, `-i` | **Interactive selection UI**.                            |
 | `--init-config`       | Create a default `config.json` in the current directory. |
-| `--config-user`       | Open `config.json` in the **default editor**.            |
+| `--user-config`       | Open `config.json` in the **default editor**.            |
 | `--no-config`         | Ignore `config.json` and use **hardcoded defaults**.     |
 
 ### Input/Output flags

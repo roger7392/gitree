@@ -62,7 +62,7 @@ def main() -> None:
 
 
     # if general options used, they are executed here
-    # Handles for --version, --config-user, --no-config
+    # Handles for --version, --user-config, --no-config
     GeneralOptionsService.handle_args(ctx, config)
 
 
